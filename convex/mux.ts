@@ -10,37 +10,6 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function readEnv(...names: string[]): string | null {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value) {
-      return value;
-    }
-  }
-  return null;
-}
-
-function normalizePrivateKey(value: string): string {
-  return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
-}
-
-function getMuxJwtCredentials(): { keyId: string; keySecret: string } {
-  const keyId = readEnv("MUX_SIGNING_KEY", "MUX_SIGNING_KEY_ID");
-  if (!keyId) {
-    throw new Error(
-      "Missing required environment variable: MUX_SIGNING_KEY (or legacy MUX_SIGNING_KEY_ID)",
-    );
-  }
-
-  const keySecret = readEnv("MUX_PRIVATE_KEY", "MUX_SIGNING_PRIVATE_KEY");
-  if (!keySecret) {
-    throw new Error(
-      "Missing required environment variable: MUX_PRIVATE_KEY (or legacy MUX_SIGNING_PRIVATE_KEY)",
-    );
-  }
-
-  return { keyId, keySecret: normalizePrivateKey(keySecret) };
-}
 
 let cachedMux: Mux | null = null;
 
@@ -78,12 +47,6 @@ export async function deleteMuxAsset(assetId: string) {
   await mux.video.assets.delete(assetId);
 }
 
-export async function createSignedPlaybackId(assetId: string) {
-  const mux = getMuxClient();
-  return await mux.video.assets.createPlaybackId(assetId, {
-    policy: "signed",
-  });
-}
 
 export async function createPublicPlaybackId(assetId: string) {
   const mux = getMuxClient();
@@ -92,10 +55,6 @@ export async function createPublicPlaybackId(assetId: string) {
   });
 }
 
-export async function deletePlaybackId(assetId: string, playbackId: string) {
-  const mux = getMuxClient();
-  await mux.video.assets.deletePlaybackId(assetId, playbackId);
-}
 
 export function buildMuxPlaybackUrl(playbackId: string, token?: string): string {
   const url = new URL(`https://stream.mux.com/${playbackId}.m3u8`);
@@ -113,27 +72,6 @@ export function buildMuxThumbnailUrl(playbackId: string, token?: string): string
   return `${base}&token=${encodeURIComponent(token)}`;
 }
 
-export async function signPlaybackToken(playbackId: string, expiration = "1h") {
-  const mux = getMuxClient();
-  const credentials = getMuxJwtCredentials();
-  return await mux.jwt.signPlaybackId(playbackId, {
-    keyId: credentials.keyId,
-    keySecret: credentials.keySecret,
-    type: "video",
-    expiration,
-  });
-}
-
-export async function signThumbnailToken(playbackId: string, expiration = "1h") {
-  const mux = getMuxClient();
-  const credentials = getMuxJwtCredentials();
-  return await mux.jwt.signPlaybackId(playbackId, {
-    keyId: credentials.keyId,
-    keySecret: credentials.keySecret,
-    type: "thumbnail",
-    expiration,
-  });
-}
 
 export function verifyMuxWebhookSignature(rawBody: string, signature: string | null) {
   if (!signature) {

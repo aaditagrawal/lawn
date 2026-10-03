@@ -16,22 +16,6 @@ export async function findShareLinkByToken(ctx: ReadCtx, token: string) {
     .unique();
 }
 
-export async function cleanupExpiredShareAccessGrantsForLink(
-  ctx: MutationCtx,
-  shareLinkId: Id<"shareLinks">,
-) {
-  const grants = await ctx.db
-    .query("shareAccessGrants")
-    .withIndex("by_share_link", (q) => q.eq("shareLinkId", shareLinkId))
-    .take(EXPIRED_GRANT_SWEEP_BATCH_SIZE);
-
-  const now = Date.now();
-  for (const grant of grants) {
-    if (grant.expiresAt <= now) {
-      await ctx.db.delete(grant._id);
-    }
-  }
-}
 
 export async function issueShareAccessGrant(
   ctx: MutationCtx,

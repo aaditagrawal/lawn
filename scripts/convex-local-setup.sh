@@ -12,7 +12,7 @@
 #      CONVEX_DEPLOYMENT=dev:... value that .env.local was copied in with.
 #   2. Seeds the deployment's environment variables (a fresh local backend
 #      starts with NONE), which is required for `convex dev` to push functions:
-#        - Stripe / Clerk / Chunkify / Autumn secrets found in .env.local
+#        - Stripe / Clerk secrets found in .env.local
 #        - CLERK_JWT_ISSUER_DOMAIN, derived from VITE_CLERK_PUBLISHABLE_KEY
 #          (push-blocking, and not stored in .env.local)
 #
@@ -64,7 +64,7 @@ echo "convex-local-setup: seeding deployment environment variables..."
 seed="$(mktemp)"
 trap 'rm -f "$seed"' EXIT
 # Backend runtime secrets only; drop client (VITE_) and selection (CONVEX_) vars.
-grep -hE '^(STRIPE_|CLERK_|CHUNKIFY_|AUTUMN_|RAILWAY_|MUX_)' .env.local .env.convex.local 2>/dev/null \
+grep -hE '^(STRIPE_|CLERK_|RAILWAY_|MUX_)' .env.local .env.convex.local 2>/dev/null \
   | grep -vE '^VITE_' > "$seed" || true
 # Derive CLERK_JWT_ISSUER_DOMAIN from the Clerk publishable key when not provided.
 # A Clerk pk_(test|live)_ key base64-encodes "<frontend-api-host>$"; the JWT
