@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { colorNoteValidator } from "./colorNotes";
 
 export default defineSchema({
   teams: defineTable({
@@ -135,6 +136,9 @@ export default defineSchema({
     timestampSeconds: v.number(),
     parentId: v.optional(v.id("comments")),
     resolved: v.boolean(),
+    // Optional local color grade request pinned to a region of the frame at
+    // timestampSeconds. Only top-level comments carry one.
+    colorNote: v.optional(colorNoteValidator),
   })
     .index("by_video", ["videoId"])
     .index("by_video_and_timestamp", ["videoId", "timestampSeconds"])

@@ -17,6 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CommentText } from "@/components/comments/CommentText";
+import { ColorOverlay, type FrameNote } from "@/components/color/ColorOverlay";
+import { ColorNoteSummary } from "@/components/color/ColorNoteSummary";
+import { useColorReview, type ColorNoteData } from "@/lib/color/useColorReview";
 import { triggerDownload } from "@/lib/download";
 import { watchPath } from "@/lib/routes";
 import { cn, formatDuration, formatTimestamp, formatRelativeTime } from "@/lib/utils";
@@ -73,6 +76,7 @@ export default function WatchPage() {
   const [mobileCommentsOpen, setMobileCommentsOpen] = useState(false);
   const [sidebarCollapsed, toggleSidebarCollapsed] = useSidebarCollapsed();
   const playerRef = useRef<VideoPlayerHandle | null>(null);
+  const colorReview = useColorReview();
   const muxPlaybackId = videoData?.video?.muxPlaybackId ?? null;
   const playbackSource = selectMuxPlaybackSource({
     scopeKey: publicId,
@@ -167,15 +171,43 @@ export default function WatchPage() {
     setDownloadError(null);
   }, [publicId]);
 
-  const flattenedComments = useMemo(() => {
-    if (!comments) return [] as Array<{ _id: string; timestampSeconds: number; resolved: boolean }>;
+  const frameNotes = useMemo<FrameNote[]>(
+    () =>
+      (comments ?? []).flatMap((comment) =>
+        comment.colorNote
+          ? [
+              {
+                id: comment._id,
+                timestampSeconds: comment.timestampSeconds,
+                colorNote: comment.colorNote,
+              },
+            ]
+          : [],
+      ),
+    [comments],
+  );
 
-    const markers: Array<{ _id: string; timestampSeconds: number; resolved: boolean }> = [];
+  const flattenedComments = useMemo(() => {
+    if (!comments)
+      return [] as Array<{
+        _id: string;
+        timestampSeconds: number;
+        resolved: boolean;
+        colorNote?: ColorNoteData;
+      }>;
+
+    const markers: Array<{
+      _id: string;
+      timestampSeconds: number;
+      resolved: boolean;
+      colorNote?: ColorNoteData;
+    }> = [];
     for (const comment of comments) {
       markers.push({
         _id: comment._id,
         timestampSeconds: comment.timestampSeconds,
         resolved: comment.resolved,
+        colorNote: comment.colorNote,
       });
       for (const reply of comment.replies) {
         markers.push({
@@ -416,6 +448,23 @@ export default function WatchPage() {
                 sourceRevision={playbackSource.revision}
                 poster={playbackSource.posterUrl}
                 comments={flattenedComments}
+                overlay={
+                  <ColorOverlay
+                    review={colorReview}
+                    notes={frameNotes}
+                    onSelectNote={(note) =>
+                      colorReview.toggleViewedNote(
+                        {
+                          _id: note.id,
+                          timestampSeconds: note.timestampSeconds,
+                          colorNote: note.colorNote,
+                        },
+                        playerRef.current,
+                      )
+                    }
+                  />
+                }
+                onVideoElement={colorReview.setVideo}
                 onTimeUpdate={setCurrentTime}
                 onPlaybackIssue={handlePlaybackIssue}
                 allowDownload={false}
@@ -477,9 +526,21 @@ export default function WatchPage() {
                         {formatTimestamp(comment.timestampSeconds)}
                       </button>
                     </div>
-                    <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
-                      <CommentText text={comment.text} />
-                    </p>
+                    {comment.text ? (
+                      <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
+                        <CommentText text={comment.text} />
+                      </p>
+                    ) : null}
+                    {comment.colorNote ? (
+                      <ColorNoteSummary
+                        note={comment.colorNote}
+                        isViewing={colorReview.viewed?.commentId === comment._id}
+                        onView={() => {
+                          colorReview.toggleViewedNote(comment, playerRef.current);
+                          setMobileCommentsOpen(false);
+                        }}
+                      />
+                    ) : null}
                     <p className="mt-1 text-[11px] text-[#888]">
                       {formatRelativeTime(comment._creationTime)}
                     </p>
@@ -598,9 +659,21 @@ export default function WatchPage() {
                         {formatTimestamp(comment.timestampSeconds)}
                       </button>
                     </div>
-                    <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
-                      <CommentText text={comment.text} />
-                    </p>
+                    {comment.text ? (
+                      <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
+                        <CommentText text={comment.text} />
+                      </p>
+                    ) : null}
+                    {comment.colorNote ? (
+                      <ColorNoteSummary
+                        note={comment.colorNote}
+                        isViewing={colorReview.viewed?.commentId === comment._id}
+                        onView={() => {
+                          colorReview.toggleViewedNote(comment, playerRef.current);
+                          setMobileCommentsOpen(false);
+                        }}
+                      />
+                    ) : null}
                     <p className="mt-1 text-[11px] text-[#888]">
                       {formatRelativeTime(comment._creationTime)}
                     </p>

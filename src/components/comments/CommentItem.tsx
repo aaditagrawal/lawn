@@ -17,6 +17,8 @@ import {
 import { useState } from "react";
 import { CommentInput } from "./CommentInput";
 import { CommentText } from "./CommentText";
+import { ColorNoteSummary } from "@/components/color/ColorNoteSummary";
+import type { ColorNoteData } from "@/lib/color/useColorReview";
 
 interface Comment {
   _id: Id<"comments">;
@@ -28,6 +30,7 @@ interface Comment {
   userName: string;
   userAvatarUrl?: string;
   _creationTime: number;
+  colorNote?: ColorNoteData;
 }
 
 interface CommentItemProps {
@@ -36,6 +39,9 @@ interface CommentItemProps {
   isHighlighted?: boolean;
   isReply?: boolean;
   canResolve?: boolean;
+  onViewColorNote?: (comment: Comment) => void;
+  onRemixColorNote?: (comment: Comment) => void;
+  isViewingColorNote?: boolean;
 }
 
 export function CommentItem({
@@ -44,6 +50,9 @@ export function CommentItem({
   isHighlighted = false,
   isReply = false,
   canResolve = false,
+  onViewColorNote,
+  onRemixColorNote,
+  isViewingColorNote = false,
 }: CommentItemProps) {
   const [isReplying, setIsReplying] = useState(false);
   const toggleResolved = useMutation(api.comments.toggleResolved);
@@ -125,9 +134,19 @@ export function CommentItem({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
-            <CommentText text={comment.text} />
-          </p>
+          {comment.text ? (
+            <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
+              <CommentText text={comment.text} />
+            </p>
+          ) : null}
+          {comment.colorNote ? (
+            <ColorNoteSummary
+              note={comment.colorNote}
+              isViewing={isViewingColorNote}
+              onView={onViewColorNote ? () => onViewColorNote(comment) : undefined}
+              onRemix={onRemixColorNote ? () => onRemixColorNote(comment) : undefined}
+            />
+          ) : null}
           <p className="mt-1 text-[11px] text-[#888]">
             {formatRelativeTime(comment._creationTime)}
           </p>

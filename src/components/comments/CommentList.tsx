@@ -6,6 +6,9 @@ import { Id } from "../../../convex/_generated/dataModel";
 import { FunctionReturnType } from "convex/server";
 import { CommentItem } from "./CommentItem";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { ComponentProps } from "react";
+
+type ViewColorNoteHandler = NonNullable<ComponentProps<typeof CommentItem>["onViewColorNote"]>;
 
 type ThreadedComments = FunctionReturnType<typeof api.comments.getThreaded>;
 
@@ -15,6 +18,9 @@ interface CommentListProps {
   onTimestampClick: (seconds: number) => void;
   highlightedCommentId?: Id<"comments">;
   canResolve?: boolean;
+  onViewColorNote?: ViewColorNoteHandler;
+  onRemixColorNote?: ViewColorNoteHandler;
+  viewingColorNoteId?: string;
 }
 
 export function CommentList(props: CommentListProps) {
@@ -24,6 +30,9 @@ export function CommentList(props: CommentListProps) {
     onTimestampClick,
     highlightedCommentId,
     canResolve = false,
+    onViewColorNote,
+    onRemixColorNote,
+    viewingColorNoteId,
   } = props;
   const hasProvidedComments = "comments" in props;
   const queriedComments = useQuery(
@@ -58,6 +67,9 @@ export function CommentList(props: CommentListProps) {
               onTimestampClick={onTimestampClick}
               isHighlighted={highlightedCommentId === comment._id}
               canResolve={canResolve}
+              onViewColorNote={onViewColorNote}
+              onRemixColorNote={onRemixColorNote}
+              isViewingColorNote={viewingColorNoteId === comment._id}
             />
             {comment.replies.length > 0 && (
               <div className="relative space-y-4 pr-4 pb-4 pl-14">

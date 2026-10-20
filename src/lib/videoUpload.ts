@@ -331,7 +331,7 @@ async function uploadPartWithRetry(args: {
         });
         const replacement = signed.parts[0];
         if (!replacement) {
-          throw new Error("Failed to refresh upload part URL.");
+          throw new Error("Failed to refresh upload part URL.", { cause: error });
         }
         url = replacement.url;
       }

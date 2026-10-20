@@ -74,3 +74,34 @@ test("builds a stable filesystem-safe filename", () => {
   );
   assert.equal(buildCommentsCsvFilename("你好"), "video-comments.csv");
 });
+
+test("summarizes color notes alongside their text", () => {
+  const csv = buildCommentsCsv([
+    {
+      text: "",
+      timestampSeconds: 3,
+      colorNote: {
+        shape: { kind: "ellipse" },
+        invert: false,
+        sampledColor: "#c28d6b",
+        adjustments: {
+          exposure: 0.5,
+          contrast: 0,
+          saturation: 0,
+          hue: 0,
+          temperature: 10,
+          tint: 0,
+        },
+      },
+      replies: [],
+    },
+  ]);
+
+  assert.equal(
+    csv,
+    [
+      "Timestamp,Comment",
+      '"0:03","[Color note: ellipse, sampled #C28D6B, +0.50 EV, Warmer 10]"',
+    ].join("\r\n"),
+  );
+});

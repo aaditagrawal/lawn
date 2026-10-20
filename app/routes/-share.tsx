@@ -13,6 +13,9 @@ import { formatDuration, formatTimestamp, formatRelativeTime } from "@/lib/utils
 import { useVideoPresence } from "@/lib/useVideoPresence";
 import { VideoWatchers } from "@/components/presence/VideoWatchers";
 import { CommentText } from "@/components/comments/CommentText";
+import { ColorOverlay, type FrameNote } from "@/components/color/ColorOverlay";
+import { ColorNoteSummary } from "@/components/color/ColorNoteSummary";
+import { useColorReview, type ColorNoteData } from "@/lib/color/useColorReview";
 import { Lock, Video, AlertCircle, MessageSquare, Clock, Download } from "lucide-react";
 import {
   prefetchHlsRuntime,
@@ -72,6 +75,7 @@ export default function SharePage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
+  const colorReview = useColorReview();
   const grantRequestIdRef = useRef(0);
   const activeGrantRequestRef = useRef<GrantRequest | null>(null);
   const isRequestingGrant = grantRequest?.shareToken === token;
@@ -254,15 +258,43 @@ export default function SharePage() {
     };
   }, [activePlaybackRequest, getPlaybackSession, grantToken]);
 
-  const flattenedComments = useMemo(() => {
-    if (!comments) return [] as Array<{ _id: string; timestampSeconds: number; resolved: boolean }>;
+  const frameNotes = useMemo<FrameNote[]>(
+    () =>
+      (comments ?? []).flatMap((comment) =>
+        comment.colorNote
+          ? [
+              {
+                id: comment._id,
+                timestampSeconds: comment.timestampSeconds,
+                colorNote: comment.colorNote,
+              },
+            ]
+          : [],
+      ),
+    [comments],
+  );
 
-    const markers: Array<{ _id: string; timestampSeconds: number; resolved: boolean }> = [];
+  const flattenedComments = useMemo(() => {
+    if (!comments)
+      return [] as Array<{
+        _id: string;
+        timestampSeconds: number;
+        resolved: boolean;
+        colorNote?: ColorNoteData;
+      }>;
+
+    const markers: Array<{
+      _id: string;
+      timestampSeconds: number;
+      resolved: boolean;
+      colorNote?: ColorNoteData;
+    }> = [];
     for (const comment of comments) {
       markers.push({
         _id: comment._id,
         timestampSeconds: comment.timestampSeconds,
         resolved: comment.resolved,
+        colorNote: comment.colorNote,
       });
       for (const reply of comment.replies) {
         markers.push({
@@ -504,6 +536,23 @@ export default function SharePage() {
                 sourceRevision={playbackSource.revision}
                 poster={playbackSource.posterUrl}
                 comments={flattenedComments}
+                overlay={
+                  <ColorOverlay
+                    review={colorReview}
+                    notes={frameNotes}
+                    onSelectNote={(note) =>
+                      colorReview.toggleViewedNote(
+                        {
+                          _id: note.id,
+                          timestampSeconds: note.timestampSeconds,
+                          colorNote: note.colorNote,
+                        },
+                        playerRef.current,
+                      )
+                    }
+                  />
+                }
+                onVideoElement={colorReview.setVideo}
                 onTimeUpdate={setCurrentTime}
                 onPlaybackIssue={handlePlaybackIssue}
                 allowDownload={false}
@@ -586,9 +635,18 @@ export default function SharePage() {
                       {formatTimestamp(comment.timestampSeconds)}
                     </button>
                   </div>
-                  <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
-                    <CommentText text={comment.text} />
-                  </p>
+                  {comment.text ? (
+                    <p className="mt-1 text-sm break-words whitespace-pre-wrap text-[#1a1a1a]">
+                      <CommentText text={comment.text} />
+                    </p>
+                  ) : null}
+                  {comment.colorNote ? (
+                    <ColorNoteSummary
+                      note={comment.colorNote}
+                      isViewing={colorReview.viewed?.commentId === comment._id}
+                      onView={() => colorReview.toggleViewedNote(comment, playerRef.current)}
+                    />
+                  ) : null}
                   <p className="mt-1 text-[11px] text-[#888]">
                     {formatRelativeTime(comment._creationTime)}
                   </p>

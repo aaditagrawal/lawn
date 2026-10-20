@@ -1,6 +1,7 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
@@ -10,6 +11,7 @@ export default defineConfig({
     noExternal: ["@atlaskit/pragmatic-drag-and-drop"],
   },
   plugins: [
+    tailwindcss(),
     tsconfigPaths({
       projects: ["./tsconfig.json"],
     }),

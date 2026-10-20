@@ -1,8 +1,29 @@
 import { formatTimestamp } from "@/lib/utils";
+import { describeGrade, type ColorAdjustments, type ColorMatch } from "@/lib/color/grade";
 
 interface CsvComment {
   text: string;
   timestampSeconds: number;
+  colorNote?: {
+    adjustments: ColorAdjustments;
+    match?: ColorMatch;
+    sampledColor?: string;
+    invert: boolean;
+    shape: { kind: string };
+  };
+}
+
+function commentText(comment: CsvComment) {
+  if (!comment.colorNote) return comment.text;
+  const note = comment.colorNote;
+  const grade = describeGrade(note.adjustments, note.match);
+  const details = [
+    `${note.shape.kind}${note.invert ? " (outside)" : ""}`,
+    note.sampledColor ? `sampled ${note.sampledColor.toUpperCase()}` : null,
+    ...grade,
+  ].filter(Boolean);
+  const summary = `[Color note: ${details.join(", ")}]`;
+  return comment.text ? `${comment.text} ${summary}` : summary;
 }
 
 interface CsvCommentThread extends CsvComment {
@@ -26,9 +47,10 @@ export function buildCommentsCsv(comments: CsvCommentThread[]) {
   return [
     "Timestamp,Comment",
     ...rows.map((comment) =>
-      [escapeCsvCell(formatTimestamp(comment.timestampSeconds)), escapeCsvCell(comment.text)].join(
-        ",",
-      ),
+      [
+        escapeCsvCell(formatTimestamp(comment.timestampSeconds)),
+        escapeCsvCell(commentText(comment)),
+      ].join(","),
     ),
   ].join("\r\n");
 }

@@ -838,7 +838,7 @@ export const markUploadComplete = action({
         videoId: args.videoId,
         uploadError,
       });
-      throw new Error("Mux ingest failed after upload. Retry processing without re-uploading.");
+      throw new Error("Mux ingest failed after upload. Retry processing without re-uploading.", { cause: error });
     }
 
     return { success: true };

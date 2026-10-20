@@ -2,7 +2,7 @@ import { VideoEditorLayout } from "@/components/video-player/VideoEditorLayout";
 import { useConvex, useMutation, useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,7 @@ import {
   Upload,
   Trash2,
   Loader2,
+  MapPin,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,6 +68,11 @@ import { prewarmProject } from "./-project.data";
 import { prewarmTeam } from "./-team.data";
 import { prewarmVideo, useVideoData } from "./-video.data";
 import { ExpandableTitle } from "@/components/ExpandableTitle";
+import { ColorOverlay, type FrameNote } from "@/components/color/ColorOverlay";
+import { useColorReview, type ColorNoteData } from "@/lib/color/useColorReview";
+
+// The color panel (scopes, wheels, qualifier…) loads only when opened.
+const ColorPanel = lazy(() => import("@/components/color/ColorPanel"));
 
 type VideoVersion = {
   _id: Id<"videos">;
@@ -309,7 +315,10 @@ export default function VideoPage() {
   const getPlaybackSession = useAction(api.videoActions.getPlaybackSession);
   const getOriginalPlaybackUrl = useAction(api.videoActions.getOriginalPlaybackUrl);
   const getDownloadUrl = useAction(api.videoActions.getDownloadUrl);
+  const createComment = useMutation(api.comments.create);
   const { requestVersionUpload } = useDashboardUploadContext();
+  const colorReview = useColorReview();
+  const [sidebarTab, setSidebarTab] = useState<"discussion" | "color">("discussion");
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -825,6 +834,77 @@ export default function VideoPage() {
     },
     [playerRef, setHighlightedCommentId],
   );
+
+  const { viewNote, viewed: viewedColorNote, toggleViewedNote } = colorReview;
+  const handleViewColorNote = useCallback(
+    (comment: { _id: string; timestampSeconds: number; colorNote?: ColorNoteData }) =>
+      toggleViewedNote(comment, playerRef.current),
+    [toggleViewedNote],
+  );
+
+  const frameNotes = useMemo<FrameNote[]>(
+    () =>
+      (comments ?? []).flatMap((comment) =>
+        comment.colorNote && !comment.parentId
+          ? [
+              {
+                id: comment._id,
+                timestampSeconds: comment.timestampSeconds,
+                colorNote: comment.colorNote,
+              },
+            ]
+          : [],
+      ),
+    [comments],
+  );
+
+  const handleSelectFrameNote = useCallback(
+    (note: FrameNote) => {
+      handleViewColorNote({
+        _id: note.id,
+        timestampSeconds: note.timestampSeconds,
+        colorNote: note.colorNote,
+      });
+      setHighlightedCommentId(note.id as Id<"comments">);
+      setSidebarTab("discussion");
+    },
+    [handleViewColorNote],
+  );
+
+  const { draftFromNote, beginDraft, setTool: setColorTool } = colorReview;
+  const handleRemixColorNote = useCallback(
+    (comment: { timestampSeconds: number; colorNote?: ColorNoteData }) => {
+      if (!comment.colorNote) return;
+      playerRef.current?.pause();
+      playerRef.current?.seekTo(comment.timestampSeconds);
+      draftFromNote(comment.colorNote, comment.timestampSeconds);
+      setSidebarTab("color");
+    },
+    [draftFromNote],
+  );
+
+  const handleMarkArea = useCallback(() => {
+    playerRef.current?.pause();
+    beginDraft("area");
+    setColorTool("rect");
+    setSidebarTab("color");
+  }, [beginDraft, setColorTool]);
+
+  const handleSubmitColorNote = useCallback(
+    async (text: string, colorNote: ColorNoteData, timestampSeconds: number) => {
+      if (!resolvedVideoId) return;
+      await createComment({ videoId: resolvedVideoId, text, timestampSeconds, colorNote });
+    },
+    [createComment, resolvedVideoId],
+  );
+
+  // Color tools only make sense against the version they were drawn on.
+  const { resetDraft, clearPins } = colorReview;
+  useEffect(() => {
+    resetDraft();
+    clearPins();
+    viewNote(null);
+  }, [clearPins, resetDraft, resolvedVideoId, viewNote]);
 
   const handleExportComments = useCallback(() => {
     if (!video || !commentsThreaded?.length) return;
@@ -1378,6 +1458,15 @@ export default function VideoPage() {
               comments={comments || []}
               onTimeUpdate={handleTimeUpdate}
               onMarkerClick={handleMarkerClick}
+              overlay={
+                <ColorOverlay
+                  review={colorReview}
+                  notes={frameNotes}
+                  onSelectNote={handleSelectFrameNote}
+                />
+              }
+              overlayActive={Boolean(colorReview.tool || colorReview.eyedropper)}
+              onVideoElement={colorReview.setVideo}
               allowDownload={video.status === "ready"}
               downloadFilename={`${video.title}.mp4`}
               onRequestDownload={requestDownload}
@@ -1490,16 +1579,29 @@ export default function VideoPage() {
           aria-hidden={sidebarCollapsed}
           inert={sidebarCollapsed}
         >
-          <div className="flex flex-shrink-0 items-center justify-between border-b border-[#1a1a1a]/10 px-5 py-4 dark:border-white/10">
-            <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-[#1a1a1a] dark:text-[#f0f0e8]">
-              Discussion
-            </h2>
-            <div className="flex items-center gap-2">
-              {comments && comments.length > 0 && (
-                <span className="rounded-full bg-[#1a1a1a]/5 px-2 py-0.5 text-[11px] font-medium text-[#888] dark:bg-white/5">
-                  {comments.length} {comments.length === 1 ? "comment" : "comments"}
-                </span>
-              )}
+          <div className="flex flex-shrink-0 items-center justify-between border-b border-[#1a1a1a]/10 px-3 py-3 dark:border-white/10">
+            <div className="flex" role="tablist" aria-label="Sidebar">
+              {(["discussion", "color"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={sidebarTab === tab}
+                  onClick={() => setSidebarTab(tab)}
+                  className={cn(
+                    "border-2 border-[#1a1a1a] px-3 py-1 text-xs font-black tracking-wider uppercase transition-colors [&+&]:border-l-0",
+                    sidebarTab === tab
+                      ? "bg-[#1a1a1a] text-[#f0f0e8]"
+                      : "text-[#1a1a1a] hover:bg-[#1a1a1a]/10",
+                  )}
+                >
+                  {tab === "discussion"
+                    ? `Discussion${comments && comments.length > 0 ? ` ${comments.length}` : ""}`
+                    : "Color"}
+                </button>
+              ))}
+            </div>
+            {sidebarTab === "discussion" ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1510,19 +1612,45 @@ export default function VideoPage() {
                 <Download className="h-3.5 w-3.5" />
                 Export CSV
               </Button>
-            </div>
+            ) : null}
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className={cn("flex-1 overflow-hidden", sidebarTab !== "discussion" && "hidden")}>
             <CommentList
               videoId={resolvedVideoId}
               comments={commentsThreaded}
               onTimestampClick={handleTimestampClick}
               highlightedCommentId={highlightedCommentId}
               canResolve={canEdit}
+              onViewColorNote={handleViewColorNote}
+              onRemixColorNote={handleRemixColorNote}
+              viewingColorNoteId={viewedColorNote?.commentId}
             />
           </div>
-          {canComment && (
+          {sidebarTab === "color" ? (
+            <div className="flex-1 overflow-y-auto">
+              <Suspense fallback={<div className="p-4 text-sm text-[#888]">Loading…</div>}>
+                <ColorPanel
+                  review={colorReview}
+                  currentTime={currentTime}
+                  canComment={canComment}
+                  onSubmitColorNote={handleSubmitColorNote}
+                  onRequestPause={() => playerRef.current?.pause()}
+                  onSeek={(time) => playerRef.current?.seekTo(time)}
+                  stillLabel={`v${video.versionNumber}`}
+                />
+              </Suspense>
+            </div>
+          ) : null}
+          {canComment && sidebarTab === "discussion" && (
             <div className="flex-shrink-0 border-t-2 border-[#1a1a1a] bg-[#f0f0e8]">
+              <button
+                type="button"
+                onClick={handleMarkArea}
+                className="flex w-full items-center gap-2 border-b border-[#1a1a1a]/15 px-4 py-2 text-left font-mono text-[10px] font-bold tracking-wider text-[#1a1a1a] uppercase hover:bg-[#1a1a1a] hover:text-[#f0f0e8]"
+              >
+                <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                Mark an area on the frame
+              </button>
               <CommentInput
                 videoId={resolvedVideoId}
                 timestampSeconds={currentTime}
@@ -1577,6 +1705,11 @@ export default function VideoPage() {
               }}
               highlightedCommentId={highlightedCommentId}
               canResolve={canEdit}
+              onViewColorNote={(comment) => {
+                handleViewColorNote(comment);
+                setMobileCommentsOpen(false);
+              }}
+              viewingColorNoteId={viewedColorNote?.commentId}
             />
           </div>
           {canComment && (

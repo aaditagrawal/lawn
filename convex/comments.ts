@@ -3,6 +3,15 @@ import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { identityAvatarUrl, identityName, requireVideoAccess, requireUser } from "./auth";
 import { resolveActiveShareGrant } from "./shareAccess";
 import { resolvePublicVideo } from "./videos";
+import { assertValidColorNote, colorNoteValidator, type ColorNote } from "./colorNotes";
+
+function assertValidColorNoteArgs(colorNote: ColorNote | undefined, parentId: string | undefined) {
+  if (!colorNote) return;
+  if (parentId) {
+    throw new Error("Replies cannot carry a color note");
+  }
+  assertValidColorNote(colorNote);
+}
 
 function toThreadedComments<
   T extends { _id: string; parentId?: string; timestampSeconds: number; _creationTime: number },
@@ -44,6 +53,7 @@ function toPublicCommentPayload(comment: {
   resolved: boolean;
   userName: string;
   userAvatarUrl?: string;
+  colorNote?: ColorNote;
 }) {
   return {
     _id: comment._id,
@@ -54,6 +64,7 @@ function toPublicCommentPayload(comment: {
     resolved: comment.resolved,
     userName: comment.userName,
     userAvatarUrl: comment.userAvatarUrl,
+    colorNote: comment.colorNote,
   };
 }
 
@@ -83,9 +94,12 @@ export const create = mutation({
     text: v.string(),
     timestampSeconds: v.number(),
     parentId: v.optional(v.id("comments")),
+    colorNote: v.optional(colorNoteValidator),
   },
   handler: async (ctx, args) => {
     const { user } = await requireVideoAccess(ctx, args.videoId, "viewer");
+
+    assertValidColorNoteArgs(args.colorNote, args.parentId);
 
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
@@ -103,6 +117,7 @@ export const create = mutation({
       timestampSeconds: args.timestampSeconds,
       parentId: args.parentId,
       resolved: false,
+      colorNote: args.colorNote,
     });
   },
 });
@@ -113,6 +128,7 @@ export const createForPublic = mutation({
     text: v.string(),
     timestampSeconds: v.number(),
     parentId: v.optional(v.id("comments")),
+    colorNote: v.optional(colorNoteValidator),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -121,6 +137,8 @@ export const createForPublic = mutation({
     if (!video) {
       throw new Error("Video not found");
     }
+
+    assertValidColorNoteArgs(args.colorNote, args.parentId);
 
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
@@ -138,6 +156,7 @@ export const createForPublic = mutation({
       timestampSeconds: args.timestampSeconds,
       parentId: args.parentId,
       resolved: false,
+      colorNote: args.colorNote,
     });
   },
 });
@@ -148,6 +167,7 @@ export const createForShareGrant = mutation({
     text: v.string(),
     timestampSeconds: v.number(),
     parentId: v.optional(v.id("comments")),
+    colorNote: v.optional(colorNoteValidator),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -162,6 +182,8 @@ export const createForShareGrant = mutation({
       throw new Error("Video not found");
     }
 
+    assertValidColorNoteArgs(args.colorNote, args.parentId);
+
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId);
       if (!parent || parent.videoId !== video._id) {
@@ -178,6 +200,7 @@ export const createForShareGrant = mutation({
       timestampSeconds: args.timestampSeconds,
       parentId: args.parentId,
       resolved: false,
+      colorNote: args.colorNote,
     });
   },
 });

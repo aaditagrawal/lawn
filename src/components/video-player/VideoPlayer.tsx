@@ -9,6 +9,7 @@ import {
   useMemo,
   forwardRef,
   useImperativeHandle,
+  type ReactNode,
 } from "react";
 import { createShuttleController, bindPlaybackShortcuts, type PlaybackAction } from "./shuttle";
 import type Hls from "hls.js";
@@ -42,6 +43,7 @@ interface Comment {
   _id: string;
   timestampSeconds: number;
   resolved: boolean;
+  colorNote?: unknown;
 }
 
 interface DownloadResult {
@@ -80,6 +82,11 @@ interface VideoPlayerProps {
   editorControls?: boolean;
   theaterMode?: boolean;
   onToggleTheater?: () => void;
+  /** Rendered over the picture, inside the frame (and inside fullscreen). */
+  overlay?: ReactNode;
+  /** When true, the overlay owns the picture: hide the big play button. */
+  overlayActive?: boolean;
+  onVideoElement?: (video: HTMLVideoElement | null) => void;
 }
 
 export type VideoPlaybackIssue =
@@ -98,6 +105,7 @@ export type VideoPlaybackIssue =
 
 export interface VideoPlayerHandle {
   seekTo: (time: number, options?: { play?: boolean }) => void;
+  pause: () => void;
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
@@ -139,6 +147,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     editorControls = false,
     theaterMode = false,
     onToggleTheater,
+    overlay,
+    overlayActive = false,
+    onVideoElement,
   },
   ref,
 ) {
@@ -261,7 +272,17 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     [applyTime, showControls],
   );
 
-  useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
+  const pause = useCallback(() => {
+    shuttleRef.current?.pause();
+  }, []);
+
+  useImperativeHandle(ref, () => ({ seekTo, pause }), [seekTo, pause]);
+
+  useEffect(() => {
+    if (!onVideoElement) return;
+    onVideoElement(videoRef.current);
+    return () => onVideoElement(null);
+  }, [onVideoElement]);
 
   const handleSeekBy = useCallback(
     (delta: number) => {
@@ -1006,14 +1027,16 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         {/* Comment markers */}
         {groupedMarkers.map((marker) => {
           const isResolved = marker.comment.resolved;
+          const isColorNote = Boolean(marker.comment.colorNote);
           const isActive = Math.abs(displayTime - marker.comment.timestampSeconds) < 1.5;
           return (
             <button
               key={marker.comment._id}
               type="button"
               className={cn(
-                "absolute top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black/40 shadow",
-                isResolved ? "bg-green-400" : "bg-orange-400",
+                "absolute top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 border border-black/40 shadow",
+                isColorNote ? "rotate-45 rounded-none" : "rounded-full",
+                isResolved ? "bg-green-400" : isColorNote ? "bg-[#f0f0e8]" : "bg-orange-400",
                 isActive && "ring-2 ring-white/60",
               )}
               style={{ left: `${marker.position}%` }}
@@ -1026,8 +1049,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 onMarkerClick?.(marker.comment);
                 showControls();
               }}
-              aria-label={`Jump to comment at ${formatTimestamp(marker.comment.timestampSeconds)}`}
-              title={`Comment at ${formatTimestamp(marker.comment.timestampSeconds)}`}
+              aria-label={`Jump to ${isColorNote ? "color note" : "comment"} at ${formatTimestamp(marker.comment.timestampSeconds)}`}
+              title={`${isColorNote ? "Color note" : "Comment"} at ${formatTimestamp(marker.comment.timestampSeconds)}`}
             />
           );
         })}
@@ -1311,6 +1334,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           )}
           playsInline
           preload="auto"
+          // Keeps the canvas origin-clean so color tools can read pixels.
+          crossOrigin="anonymous"
           onClick={(e) => {
             e.stopPropagation();
             containerRef.current?.focus({ preventScroll: true });
@@ -1333,8 +1358,10 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
           </div>
         )}
 
+        {overlay}
+
         {/* Big play button */}
-        {!isPlaying && (
+        {!isPlaying && !overlayActive && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <button
               type="button"
