@@ -2,7 +2,7 @@
   "name": "l2",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.3",
   "scripts": {
     "dev": "bash scripts/dev.sh",
     "dev:cloud": "concurrently -k -n web,convex -c blue,magenta \"vite dev --port 5296\" \"bunx convex dev\"",
@@ -80,5 +80,8 @@
     "tsrs": "0.18.0-ts7.1.0-dev.20260929",
     "@tailwindcss/vite": "^4.3.3"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "satori@0.63.2>fflate": "0.7.5"
+  }
 }
