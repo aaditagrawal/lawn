@@ -34,13 +34,11 @@ function Harness() {
           overlay={
             <ColorOverlay
               review={review}
-              notes={notes.map(
-                (note): FrameNote => ({
-                  id: note.id,
-                  timestampSeconds: note.timestampSeconds,
-                  colorNote: note.colorNote,
-                }),
-              )}
+              notes={notes.map((note): FrameNote => ({
+                id: note.id,
+                timestampSeconds: note.timestampSeconds,
+                colorNote: note.colorNote,
+              }))}
               onSelectNote={(note) =>
                 review.toggleViewedNote(
                   {

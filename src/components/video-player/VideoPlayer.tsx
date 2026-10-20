@@ -66,10 +66,7 @@ interface VideoPlayerProps {
   downloadUrl?: string;
   downloadFilename?: string;
   onRequestDownload?: () =>
-    | Promise<DownloadResult | null | undefined>
-    | DownloadResult
-    | null
-    | undefined;
+    Promise<DownloadResult | null | undefined> | DownloadResult | null | undefined;
   qualityOptionsConfig?: Array<{
     id: string;
     label: string;

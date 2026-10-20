@@ -176,9 +176,7 @@ type InitiateAlreadyUploaded = {
 };
 
 export type InitiateVideoUploadResult =
-  | InitiateSingle
-  | InitiateMultipart
-  | InitiateAlreadyUploaded;
+  InitiateSingle | InitiateMultipart | InitiateAlreadyUploaded;
 
 export type VideoUploadActions = {
   initiateVideoUpload: (args: {

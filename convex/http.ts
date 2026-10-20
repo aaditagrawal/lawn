@@ -22,10 +22,7 @@ function getSubscriptionOrgId(subscription: WebhookSubscription): string | undef
 registerRoutes(http, components.stripe, {
   webhookPath: "/stripe/webhook",
   events: {
-    "customer.subscription.created": async (
-      ctx,
-      event,
-    ) => {
+    "customer.subscription.created": async (ctx, event) => {
       const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
@@ -36,10 +33,7 @@ registerRoutes(http, components.stripe, {
         status: subscription.status,
       });
     },
-    "customer.subscription.updated": async (
-      ctx,
-      event,
-    ) => {
+    "customer.subscription.updated": async (ctx, event) => {
       const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
@@ -50,10 +44,7 @@ registerRoutes(http, components.stripe, {
         status: subscription.status,
       });
     },
-    "customer.subscription.deleted": async (
-      ctx,
-      event,
-    ) => {
+    "customer.subscription.deleted": async (ctx, event) => {
       const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
