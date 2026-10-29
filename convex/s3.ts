@@ -2,7 +2,6 @@ import { S3Client } from "@aws-sdk/client-s3";
 
 export const BUCKET_NAME = process.env.RAILWAY_BUCKET_NAME || "videos";
 
-
 let _s3Client: S3Client | null = null;
 
 export function getS3Client(): S3Client {

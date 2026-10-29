@@ -16,7 +16,6 @@ export async function findShareLinkByToken(ctx: ReadCtx, token: string) {
     .unique();
 }
 
-
 export async function issueShareAccessGrant(
   ctx: MutationCtx,
   shareLinkId: Id<"shareLinks">,
