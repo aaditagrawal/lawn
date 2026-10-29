@@ -265,8 +265,7 @@ async function requireVideoMemberAccess(
   videoId: Id<"videos">,
 ): Promise<Doc<"videos">> {
   const video = (await ctx.runQuery(api.videos.get, { videoId })) as
-    | (Doc<"videos"> & { role?: string })
-    | null;
+    (Doc<"videos"> & { role?: string }) | null;
   if (!video || video.role === "viewer") {
     throw new Error("Requires member role or higher");
   }
@@ -838,7 +837,9 @@ export const markUploadComplete = action({
         videoId: args.videoId,
         uploadError,
       });
-      throw new Error("Mux ingest failed after upload. Retry processing without re-uploading.");
+      throw new Error("Mux ingest failed after upload. Retry processing without re-uploading.", {
+        cause: error,
+      });
     }
 
     return { success: true };

@@ -1,16 +1,21 @@
 import { registerRoutes } from "@convex-dev/stripe";
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import type Stripe from "stripe";
 import { components, internal } from "./_generated/api";
 
 const http = httpRouter();
 
-function getSubscriptionPriceId(subscription: Stripe.Subscription): string | undefined {
+function getSubscriptionPriceId(subscription: {
+  items: { data: { price?: { id?: string } }[] };
+  metadata: Record<string, string>;
+}): string | undefined {
   return subscription.items.data[0]?.price?.id;
 }
 
-function getSubscriptionOrgId(subscription: Stripe.Subscription): string | undefined {
+function getSubscriptionOrgId(subscription: {
+  items: { data: { price?: { id?: string } }[] };
+  metadata: Record<string, string>;
+}): string | undefined {
   const orgId = subscription.metadata.orgId;
   return typeof orgId === "string" && orgId.length > 0 ? orgId : undefined;
 }
@@ -18,11 +23,8 @@ function getSubscriptionOrgId(subscription: Stripe.Subscription): string | undef
 registerRoutes(http, components.stripe, {
   webhookPath: "/stripe/webhook",
   events: {
-    "customer.subscription.created": async (
-      ctx,
-      event: Stripe.Event & { type: "customer.subscription.created" },
-    ) => {
-      const subscription = event.data.object as Stripe.Subscription;
+    "customer.subscription.created": async (ctx, event) => {
+      const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
         stripeCustomerId:
@@ -32,11 +34,8 @@ registerRoutes(http, components.stripe, {
         status: subscription.status,
       });
     },
-    "customer.subscription.updated": async (
-      ctx,
-      event: Stripe.Event & { type: "customer.subscription.updated" },
-    ) => {
-      const subscription = event.data.object as Stripe.Subscription;
+    "customer.subscription.updated": async (ctx, event) => {
+      const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
         stripeCustomerId:
@@ -46,11 +45,8 @@ registerRoutes(http, components.stripe, {
         status: subscription.status,
       });
     },
-    "customer.subscription.deleted": async (
-      ctx,
-      event: Stripe.Event & { type: "customer.subscription.deleted" },
-    ) => {
-      const subscription = event.data.object as Stripe.Subscription;
+    "customer.subscription.deleted": async (ctx, event) => {
+      const subscription = event.data.object;
       await ctx.runMutation(internal.billing.syncTeamSubscriptionFromWebhook, {
         orgId: getSubscriptionOrgId(subscription),
         stripeCustomerId:

@@ -126,8 +126,8 @@ export function DashboardHeader({
         <UserButton
           appearance={{
             variables: {
-              colorText: "#1a1a1a",
-              colorTextSecondary: "#888",
+              colorForeground: "#1a1a1a",
+              colorMutedForeground: "#888",
               colorBackground: "#f0f0e8",
             },
             elements: {
