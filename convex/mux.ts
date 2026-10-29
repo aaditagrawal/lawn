@@ -10,7 +10,6 @@ function requireEnv(name: string): string {
   return value;
 }
 
-
 let cachedMux: Mux | null = null;
 
 export function getMuxClient(): Mux {
@@ -47,14 +46,12 @@ export async function deleteMuxAsset(assetId: string) {
   await mux.video.assets.delete(assetId);
 }
 
-
 export async function createPublicPlaybackId(assetId: string) {
   const mux = getMuxClient();
   return await mux.video.assets.createPlaybackId(assetId, {
     policy: "public",
   });
 }
-
 
 export function buildMuxPlaybackUrl(playbackId: string, token?: string): string {
   const url = new URL(`https://stream.mux.com/${playbackId}.m3u8`);
@@ -71,7 +68,6 @@ export function buildMuxThumbnailUrl(playbackId: string, token?: string): string
   if (!token) return base;
   return `${base}&token=${encodeURIComponent(token)}`;
 }
-
 
 export function verifyMuxWebhookSignature(rawBody: string, signature: string | null) {
   if (!signature) {

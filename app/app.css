@@ -1,6 +1,6 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
-@import "tailwindcss";
+@import "tailwindcss/index.css";
 
 :root {
   /* Core palette - warm cream and dark */

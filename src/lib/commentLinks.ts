@@ -1,6 +1,5 @@
 export type CommentTextPart =
-  | { type: "text"; value: string }
-  | { type: "link"; value: string; href: string };
+  { type: "text"; value: string } | { type: "link"; value: string; href: string };
 
 const URL_PATTERN = /https?:\/\/[^\s<]+/giu;
 const TRAILING_PUNCTUATION = new Set([".", ",", "!", "?", ";", ":", "'", '"', ">"]);
