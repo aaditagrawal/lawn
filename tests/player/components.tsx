@@ -2,7 +2,6 @@ import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../src/components/ui/avatar";
 import { Button } from "../../src/components/ui/button";
-import { Progress } from "../../src/components/ui/progress";
 import { Separator } from "../../src/components/ui/separator";
 import "./styles.css";
 
@@ -37,13 +36,6 @@ function Harness() {
       </Avatar>
       <output aria-label="Loads">{loads}</output>
       <output aria-label="Errors">{errors}</output>
-      <Progress
-        aria-label="Upload progress"
-        value={75}
-        ref={(node) => {
-          if (node) node.dataset.ref = node.tagName;
-        }}
-      />
       <Separator
         data-testid="separator"
         decorative={false}

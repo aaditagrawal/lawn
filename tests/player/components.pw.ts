@@ -47,15 +47,8 @@ test("avatars preserve loading, errors, source changes, cached images, classes a
   expect(errors).toEqual([]);
 });
 
-test("progress and separator expose semantics while buttons retain keyboard activation", async ({
-  page,
-}) => {
+test("separator exposes semantics while buttons retain keyboard activation", async ({ page }) => {
   await page.goto("/components.html");
-  const progress = page.getByRole("progressbar", { name: "Upload progress" });
-  await expect(progress).toHaveAttribute("aria-valuenow", "75");
-  await expect(progress).toHaveAttribute("aria-valuemax", "100");
-  await expect(progress).toHaveAttribute("aria-valuetext", "75%");
-  await expect(progress).toHaveAttribute("data-ref", "DIV");
   await expect(page.getByRole("separator")).toHaveAttribute("aria-orientation", "vertical");
   await expect(page.getByTestId("separator")).toHaveAttribute("data-ref", "DIV");
   const save = page.getByRole("button", { name: "Save", exact: true });

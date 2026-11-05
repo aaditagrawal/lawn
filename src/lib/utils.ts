@@ -1,8 +1,8 @@
-import { type ClassValue, classNames } from "./classNames";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(classNames(...inputs));
+  return twMerge(clsx(inputs));
 }
 
 export function formatDuration(seconds: number): string {

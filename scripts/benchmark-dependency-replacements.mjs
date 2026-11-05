@@ -35,7 +35,7 @@ function fixture(sourceRoot, browser) {
   return `
 import React from "react";
 import { cn } from ${JSON.stringify(join(sourceRoot, "src/lib/utils.ts"))};
-${sourceRoot === root ? `import { classNames as flatten } from ${JSON.stringify(join(sourceRoot, "src/lib/classNames.ts"))};` : 'import { clsx as flatten } from "clsx";'}
+import { clsx as flatten } from "clsx";
 import { Button, buttonVariants } from ${JSON.stringify(join(sourceRoot, "src/components/ui/button.tsx"))};
 import { Badge, badgeVariants } from ${JSON.stringify(join(sourceRoot, "src/components/ui/badge.tsx"))};
 import { Progress } from ${JSON.stringify(join(sourceRoot, "src/components/ui/progress.tsx"))};
@@ -176,6 +176,8 @@ async function paired(workload, before, after) {
     unit: baseline[0].cpuMs === undefined ? "wall ms/batch" : "CPU ms/batch",
     baseline: b,
     candidate: c,
+    baselineSamples: baseline,
+    candidateSamples: candidate,
     ratio: c.median / b.median,
     samples,
     wall: {
@@ -193,6 +195,19 @@ async function paired(workload, before, after) {
   };
   results.push(row);
   console.log(JSON.stringify(row));
+}
+async function setupWithin(promise, phase) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Browser setup timed out: ${phase}`)), 30000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 try {
   await mkdir(baselineRoot, { recursive: true });
@@ -260,14 +275,20 @@ try {
     const browser = await chromium.launch({ headless: true });
     try {
       const pages = await Promise.all(
-        [beforeBrowser, afterBrowser].map(async (code) => {
+        [beforeBrowser, afterBrowser].map(async (code, side) => {
           const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+          page.on("pageerror", (error) =>
+            console.error(`Browser fixture ${side}: ${error.message}`),
+          );
           await page.route("http://lawn-benchmark.test/**", async (route) => {
             const path = new URL(route.request().url()).pathname;
             if (path !== "/") {
               const asset = Bun.file(join(root, "dist/client", path));
               return (await asset.exists())
-                ? route.fulfill({ body: await asset.arrayBuffer(), contentType: asset.type })
+                ? route.fulfill({
+                    body: Buffer.from(await asset.arrayBuffer()),
+                    contentType: asset.type,
+                  })
                 : route.abort();
             }
             return route.fulfill({
@@ -275,10 +296,15 @@ try {
               body: `<!doctype html><style>${css}</style><style>body{margin:0}#root{width:800px}</style><div id="root"></div>`,
             });
           });
-          await page.goto("http://lawn-benchmark.test/");
+          await page.goto("http://lawn-benchmark.test/", { waitUntil: "domcontentloaded" });
           await page.mouse.move(1200, 850);
-          await page.evaluate(() => document.fonts.ready);
-          await page.addScriptTag({ content: code, type: "module" });
+          await setupWithin(
+            page.evaluate(async () => {
+              await document.fonts.ready;
+            }),
+            `fonts ${side}`,
+          );
+          await setupWithin(page.addScriptTag({ content: code, type: "module" }), `script ${side}`);
           await page.waitForFunction(() => Boolean(window.bench));
           return page;
         }),
@@ -301,10 +327,13 @@ try {
       for (const kind of components) {
         for (const count of [1, 20, 100]) {
           for (const page of pages)
-            await page.evaluate(({ kind, count }) => window.bench.prepare(kind, count), {
-              kind,
-              count,
-            });
+            await setupWithin(
+              page.evaluate(({ kind, count }) => window.bench.prepare(kind, count), {
+                kind,
+                count,
+              }),
+              `${kind}/${count}`,
+            );
           const run = (side) =>
             browserTimed(side, () =>
               pages[side].evaluate(({ kind, count }) => window.bench.run(kind, count, 10), {
@@ -321,7 +350,10 @@ try {
       }
       for (const count of [2, 20, 100]) {
         for (const page of pages)
-          await page.evaluate((count) => window.bench.prepare("avatar", count), count);
+          await setupWithin(
+            page.evaluate((count) => window.bench.prepare("avatar", count), count),
+            `avatar-mount/${count}`,
+          );
         const run = (side) =>
           browserTimed(side, () =>
             pages[side].evaluate((count) => window.bench.mountAvatars(count, 5), count),
