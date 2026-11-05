@@ -5,7 +5,7 @@ import { ColorOverlay, type FrameNote } from "../../src/components/color/ColorOv
 import { ColorPanel } from "../../src/components/color/ColorPanel";
 import { ColorNoteSummary } from "../../src/components/color/ColorNoteSummary";
 import { useColorReview, type ColorNoteData } from "../../src/lib/color/useColorReview";
-import "../../app/app.css";
+import "./styles.css";
 
 type LocalNote = { id: string; text: string; timestampSeconds: number; colorNote: ColorNoteData };
 

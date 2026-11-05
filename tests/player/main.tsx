@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { VideoPlayer } from "../../src/components/video-player/VideoPlayer";
 import { VideoEditorLayout } from "../../src/components/video-player/VideoEditorLayout";
-import "../../app/app.css";
+import "./styles.css";
 
 function Harness() {
   const [theaterMode, setTheaterMode] = useState(false);
