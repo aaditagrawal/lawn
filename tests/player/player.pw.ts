@@ -39,6 +39,10 @@ test("J/K/L, held keys, frame steps, Space, mute, fullscreen and browser shortcu
   await page.keyboard.up("l");
   expect((await mediaState(page)).rate).toBe(4);
   await page.keyboard.press("k");
+  await expect.poll(async () => (await mediaState(page)).paused).toBe(true);
+  await expect
+    .poll(() => page.locator("video").evaluate((video: HTMLVideoElement) => video.seeking))
+    .toBe(false);
   const stopped = (await mediaState(page)).time;
   await page.keyboard.press("k");
   await page.waitForTimeout(150);
