@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir, cpus, platform, arch } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
+import assert from "node:assert/strict";
 // Run with Bun. Baseline packages live only in a disposable directory.
 // BENCH_SAMPLES=9 is useful for review; the default is 21 paired samples.
 const baselineRef = "5fea748d78b8fb55324119e281e6d63003f2e44c";
@@ -18,6 +19,7 @@ const scratch = await mkdtemp(join(tmpdir(), "lawn-dependency-bench-"));
 const baselineRoot = join(scratch, "baseline");
 const components = ["button", "badge", "progress", "separator", "avatar"];
 const results = [];
+const visualChecks = [];
 const environment = {
   runtime: `Bun ${Bun.version}`,
   platform: `${platform()} ${arch()}`,
@@ -69,24 +71,58 @@ export function helper(kind, count) {
   }
   return length;
 }
+const buttonOptions = [undefined, null, "default", "primary", "destructive", "outline", "secondary", "ghost", "link"];
+const badgeOptions = [undefined, null, "default", "secondary", "destructive", "outline", "success", "warning"];
+const sizeOptions = [undefined, null, "default", "sm", "lg", "icon"];
+export function variantCases() {
+  const extraClasses = [undefined, "", "px-3 text-left", ["p-2", false, ["px-4"]], {"font-bold": true, hidden: false}, 7];
+  const result = [buttonVariants(), badgeVariants()];
+  for (const variant of buttonOptions) for (const size of sizeOptions) {
+    for (const classes of extraClasses) for (const className of extraClasses) {
+      result.push(buttonVariants({variant, size, class: classes, className}));
+    }
+  }
+  for (const variant of badgeOptions) for (const classes of extraClasses) for (const className of extraClasses) {
+    result.push(badgeVariants({variant, class: classes, className}));
+  }
+  return result;
+}
+function gallery() {
+  return <main style={{display: "flex", flexWrap: "wrap", gap: 16, padding: 16}}>
+    {buttonOptions.flatMap((variant, v) => sizeOptions.map((size, s) =>
+      <Button key={v + "/" + s} variant={variant} size={size} aria-label={"Button " + v + "/" + s}>Save</Button>
+    ))}
+    <Button disabled>Disabled</Button>
+    <Button asChild className="h-8 px-3"><a href="#saved">Save link</a></Button>
+    {badgeOptions.map((variant, v) => <Badge key={v} variant={variant}>Ready</Badge>)}
+  </main>;
+}
 ${
   browser
     ? `
 const root = createRoot(document.getElementById("root"));
 window.bench = {
+  gallery() { flushSync(() => root.render(gallery())); },
+  async settle() {
+    await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {})));
+  },
   async prepare(kind, count) {
     flushSync(() => root.render(view(kind, count, 0)));
     await new Promise(resolve => setTimeout(resolve, 80));
     await Promise.all(Array.from(document.images, img => img.decode().catch(() => {})));
     await document.fonts.ready;
   },
-  run(kind, count, iterations) {
+  async run(kind, count, iterations) {
     const start = performance.now();
     for (let i = 0; i < iterations; i++) {
       flushSync(() => root.render(view(kind, count, i)));
       document.getElementById("root").getBoundingClientRect();
     }
-    return performance.now() - start;
+    const commitMs = performance.now() - start;
+    // Include the final CSS transition's rendering work. Otherwise alternating
+    // sample order also alternates which side pays for a previous animation.
+    await window.bench.settle();
+    return { commitMs, settledMs: performance.now() - start };
   },
   async mountAvatars(count, iterations) {
     let commitMs = 0;
@@ -225,6 +261,12 @@ try {
   const candidateServer = await bundle(root, false, "candidate");
   const baseline = await import(baselineServer);
   const candidate = await import(candidateServer);
+  assert.deepEqual(
+    candidate.variantCases(),
+    baseline.variantCases(),
+    "Variant class output changed",
+  );
+  console.log("Verified 2234 exact variant class combinations against the target snapshot.");
   const timed = (operation) => {
     const cpuStart = process.cpuUsage();
     const start = performance.now();
@@ -253,7 +295,9 @@ try {
   }
   for (const kind of components) {
     for (const count of [1, 20, 100]) {
-      const iterations = count === 1 ? 200 : count === 20 ? 20 : 5;
+      // Keep SSR batches long enough that timer and background GC noise do not
+      // dominate small components. Report each batch's CPU and wall separately.
+      const iterations = count === 1 ? 10000 : count === 20 ? 1000 : 200;
       await paired(
         `ssr/${kind}/${count}x${iterations}`,
         () => timed(() => baseline.render(kind, count, iterations)),
@@ -310,9 +354,66 @@ try {
         }),
       );
       const sessions = await Promise.all(pages.map((page) => page.context().newCDPSession(page)));
+      if (filter.test("variants") || filter.test("dom/button/") || filter.test("dom/badge/")) {
+        for (const viewport of [
+          { width: 390, height: 900 },
+          { width: 1280, height: 900 },
+        ]) {
+          for (const colorScheme of ["light", "dark"]) {
+            for (const page of pages) {
+              await page.setViewportSize(viewport);
+              await page.emulateMedia({ colorScheme });
+              await page.evaluate(() => {
+                document.getElementById("root").style.width = "100%";
+                window.bench.gallery();
+              });
+              await page.evaluate(async () => {
+                await document.fonts.ready;
+              });
+            }
+            for (const state of ["rest", "hover", "focus"]) {
+              for (const page of pages) {
+                const target = page.getByRole("button", { name: "Button 3/3", exact: true });
+                if (state === "hover") await target.hover();
+                if (state === "focus") {
+                  await page.mouse.move(viewport.width - 1, viewport.height - 1);
+                  await target.focus();
+                }
+              }
+              const screenshots = [];
+              for (const page of pages)
+                screenshots.push(await page.screenshot({ fullPage: true, animations: "disabled" }));
+              assert.ok(
+                screenshots[0].equals(screenshots[1]),
+                `Variant pixels changed: ${viewport.width}px/${colorScheme}/${state}`,
+              );
+              visualChecks.push({
+                width: viewport.width,
+                colorScheme,
+                state,
+                identicalPixels: true,
+              });
+            }
+          }
+        }
+        for (const page of pages) {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await page.emulateMedia({ colorScheme: "light" });
+          await page.mouse.move(1200, 850);
+          await page.evaluate(() => {
+            document.getElementById("root").style.width = "800px";
+          });
+        }
+        console.log(
+          "Verified identical variant pixels at mobile/desktop widths in light/dark, rest/hover/focus states.",
+        );
+      }
       for (const session of sessions)
         await session.send("Performance.enable", { timeDomain: "threadTicks" });
       const browserTimed = async (side, operation) => {
+        // Neither page should animate in the background while the other side
+        // is measured. Settlement is setup, and is outside the sample clock.
+        for (const page of pages) await page.evaluate(() => window.bench.settle());
         const taskTime = async () =>
           (await sessions[side].send("Performance.getMetrics")).metrics.find(
             (metric) => metric.name === "TaskDuration",
@@ -336,13 +437,17 @@ try {
             );
           const run = (side) =>
             browserTimed(side, () =>
-              pages[side].evaluate(({ kind, count }) => window.bench.run(kind, count, 10), {
-                kind,
-                count,
-              }),
+              pages[side].evaluate(
+                ({ kind, count, iterations }) => window.bench.run(kind, count, iterations),
+                {
+                  kind,
+                  count,
+                  iterations: count === 1 ? 1000 : count === 20 ? 100 : 20,
+                },
+              ),
             );
           await paired(
-            `dom/${kind}/${count}x10`,
+            `dom/${kind}/${count}x${count === 1 ? 1000 : count === 20 ? 100 : 20}`,
             () => run(0),
             () => run(1),
           );
@@ -372,8 +477,9 @@ try {
   const report = {
     environment,
     methodology:
-      "Production bundles, warmup 6 pairs, alternating baseline/candidate order. CPU measured via process.cpuUsage and Chromium CDP threadTicks TaskDuration; separate wall distributions expose scheduling noise. Timings exclude install/build/startup. Browser CPU includes evaluate/protocol task overhead; DOM includes flushSync commit and forced layout with decoded avatars, plus cached-image remount/load settlement. Background machine contention remains possible. No network/install speed claim.",
+      "Production bundles, warmup 6 pairs, alternating baseline/candidate order. CPU measured via process.cpuUsage and Chromium CDP threadTicks TaskDuration; separate wall distributions expose scheduling noise. Timings exclude install/build/startup. Both pages settle prior animations outside each sample. Browser CPU includes evaluate/protocol task overhead; DOM includes flushSync commit, forced layout and final CSS transition settlement with separate commit/settled wall distributions, plus cached-image remount/load settlement. Background machine contention remains possible. No network/install speed claim.",
     results,
+    verification: { variantClassCases: 2234, visualChecks },
   };
   const output = process.env.BENCH_OUTPUT ?? join(tmpdir(), "lawn-dependency-performance.json");
   await Bun.write(output, JSON.stringify(report, null, 2) + "\n");
