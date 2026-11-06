@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 const baselineRef = "5fea748d78b8fb55324119e281e6d63003f2e44c";
 const samples = Number(process.env.BENCH_SAMPLES ?? 21);
 const filter = new RegExp(process.env.BENCH_FILTER ?? ".*");
+// Diagnostic A/A control for renderer timing variance; never replacement evidence.
+const browserControl = process.env.BENCH_BROWSER_CONTROL === "baseline";
 const root = resolve(import.meta.dir, "..");
 const expectedRuntime = (await Bun.file(join(root, "package.json")).json()).packageManager;
 if (`bun@${Bun.version}` !== expectedRuntime) {
@@ -27,6 +29,7 @@ const environment = {
   logicalCpus: cpus().length,
   baselineRef,
   samples,
+  browserComparison: browserControl ? "baseline-vs-baseline" : "baseline-vs-candidate",
 };
 function command(args, cwd = root) {
   const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
@@ -315,7 +318,9 @@ try {
       );
     const css = (await Promise.all(cssFiles.map((file) => Bun.file(file).text()))).join("\n");
     const beforeBrowser = await Bun.file(await bundle(baselineRoot, true, "baseline")).text();
-    const afterBrowser = await Bun.file(await bundle(root, true, "candidate")).text();
+    const afterBrowser = browserControl
+      ? beforeBrowser
+      : await Bun.file(await bundle(root, true, "candidate")).text();
     const browser = await chromium.launch({ headless: true });
     try {
       const pages = await Promise.all(
@@ -414,16 +419,26 @@ try {
         // Neither page should animate in the background while the other side
         // is measured. Settlement is setup, and is outside the sample clock.
         for (const page of pages) await page.evaluate(() => window.bench.settle());
-        const taskTime = async () =>
-          (await sessions[side].send("Performance.getMetrics")).metrics.find(
-            (metric) => metric.name === "TaskDuration",
-          ).value;
-        const before = await taskTime();
+        const metrics = async () =>
+          Object.fromEntries(
+            (await sessions[side].send("Performance.getMetrics")).metrics.map((metric) => [
+              metric.name,
+              metric.value,
+            ]),
+          );
+        const before = await metrics();
         const measurement = await operation();
-        const cpuMs = ((await taskTime()) - before) * 1000;
+        const after = await metrics();
+        const cpuMs = (after.TaskDuration - before.TaskDuration) * 1000;
+        const detail = {
+          scriptMs: (after.ScriptDuration - before.ScriptDuration) * 1000,
+          layoutMs: (after.LayoutDuration - before.LayoutDuration) * 1000,
+          styleMs: (after.RecalcStyleDuration - before.RecalcStyleDuration) * 1000,
+          heapBytes: after.JSHeapUsedSize,
+        };
         return typeof measurement === "number"
-          ? { wallMs: measurement, cpuMs }
-          : { wallMs: measurement.settledMs, commitWallMs: measurement.commitMs, cpuMs };
+          ? { wallMs: measurement, cpuMs, ...detail }
+          : { wallMs: measurement.settledMs, commitWallMs: measurement.commitMs, cpuMs, ...detail };
       };
       for (const kind of components) {
         for (const count of [1, 20, 100]) {
